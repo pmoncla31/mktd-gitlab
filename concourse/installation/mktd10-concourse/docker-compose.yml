@@ -1,0 +1,78 @@
+version: '3.3'
+
+services:
+  init:
+    build: ./init
+    restart: 'no'
+    depends_on: [gogs,s3,vault,nexus]
+    environment:
+    - MINIO_ACCESS_KEY
+    - MINIO_SECRET_KEY
+    - VAULT_TOKEN=${VAULT_DEV_ROOT_TOKEN_ID}
+    - VAULT_ADDR=${CONCOURSE_VAULT_URL}
+    - CONCOURSE_VAULT_CLIENT_TOKEN
+    - NEXUS_ADMIN_PASSWORD
+    volumes: ["nexus-data:/nexus-data"]
+
+
+  db:
+    image: postgres:11.5
+    environment:
+    - POSTGRES_DB=${CONCOURSE_POSTGRES_DATABASE}
+    - POSTGRES_USER=${CONCOURSE_POSTGRES_USER}
+    - POSTGRES_PASSWORD=${CONCOURSE_POSTGRES_PASSWORD}
+    - PGDATA=/database
+
+  concourse:
+    image: concourse/concourse:5.4.1
+    command: quickstart
+    privileged: true
+    depends_on: [db,gogs,s3,nexus,vault]
+    ports: ["8080:8080"]
+    environment:
+    - CONCOURSE_POSTGRES_HOST=db
+    - CONCOURSE_POSTGRES_USER
+    - CONCOURSE_POSTGRES_PASSWORD
+    - CONCOURSE_POSTGRES_DATABASE
+    - CONCOURSE_EXTERNAL_URL=http://localhost:8080
+    - CONCOURSE_ADD_LOCAL_USER
+    - CONCOURSE_MAIN_TEAM_LOCAL_USER
+    - CONCOURSE_WORKER_BAGGAGECLAIM_DRIVER=overlay
+    - CONCOURSE_VAULT_URL
+    - CONCOURSE_VAULT_CLIENT_TOKEN
+
+  gogs:
+    image: gogs/gogs:0.11.91
+    ports: ["10022:22", "10080:3000"]
+    volumes: ["gogs-data:/data"]
+
+  s3:
+    image: minio/minio:RELEASE.2018-08-02T23-11-36Z
+    command: ["server", "/data"]
+    ports: ["9000:9000"]
+    environment:
+    - MINIO_ACCESS_KEY
+    - MINIO_SECRET_KEY
+    volumes: ["s3-data:/data"]
+
+  nexus:
+    image: sonatype/nexus3:3.18.1
+    ports: ["8081:8081", "8082:8082", "8083:8083"]
+    volumes: ["nexus-data:/nexus-data"]
+
+  vault:
+    image: vault:1.2.2
+    ports: ["8200:8200"]
+    environment:
+    - VAULT_DEV_ROOT_TOKEN_ID
+    cap_add:
+    - IPC_LOCK
+    volumes: ["vault-file:/vault/file", "vault-logs:/vault/logs"]
+
+
+volumes:
+  gogs-data:
+  s3-data:
+  nexus-data:
+  vault-file:
+  vault-logs:
